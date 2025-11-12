@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authService } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -61,7 +62,7 @@ const Index = () => {
   };
 
   const handleGoogleLogin = () => {
-    const clientId = '629116677903-9uu1j8b3bvj0dku0vpqstm58d9jdgbmp.apps.googleusercontent.com';
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '629116677903-9uu1j8b3bvj0dku0vpqstm58d9jdgbmp.apps.googleusercontent.com';
     const redirectUri = window.location.origin;
     const scope = 'profile email';
     const responseType = 'token';
@@ -71,30 +72,33 @@ const Index = () => {
   };
 
   useEffect(() => {
+    authService.getCurrentUser().then(currentUser => {
+      if (currentUser) {
+        setUser(currentUser);
+      }
+    });
+
     const hash = window.location.hash;
     if (hash) {
       const params = new URLSearchParams(hash.substring(1));
       const accessToken = params.get('access_token');
       
       if (accessToken) {
-        fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-          headers: { Authorization: `Bearer ${accessToken}` }
-        })
-          .then(res => res.json())
-          .then(data => {
-            setUser({
-              name: data.name,
-              email: data.email,
-              picture: data.picture
-            });
+        authService.loginWithGoogle(accessToken)
+          .then(response => {
+            setUser(response.user);
             window.history.replaceState({}, document.title, window.location.pathname);
           })
-          .catch(err => console.error('Error fetching user info:', err));
+          .catch(err => {
+            console.error('Authentication error:', err);
+            alert('Ошибка авторизации. Попробуйте снова.');
+          });
       }
     }
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await authService.logout();
     setUser(null);
   };
 

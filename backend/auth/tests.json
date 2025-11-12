@@ -1,0 +1,33 @@
+{
+  "tests": [
+    {
+      "name": "OPTIONS request returns CORS headers",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedHeaders": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
+      }
+    },
+    {
+      "name": "Missing access_token returns 400",
+      "method": "POST",
+      "path": "/?action=google",
+      "body": "{\"test\":\"data\"}",
+      "expectedStatus": 400,
+      "expectedBody": {
+        "error": "Missing access_token"
+      }
+    },
+    {
+      "name": "Get current user without token returns 401",
+      "method": "GET",
+      "path": "/?action=me",
+      "expectedStatus": 401,
+      "expectedBody": {
+        "error": "Not authenticated"
+      }
+    }
+  ]
+}
