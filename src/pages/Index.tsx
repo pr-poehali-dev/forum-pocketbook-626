@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -32,44 +32,9 @@ const Index = () => {
   const [showNewIdeaForm, setShowNewIdeaForm] = useState(false);
   const [expandedComments, setExpandedComments] = useState<string | null>(null);
   const [likedIdeas, setLikedIdeas] = useState<Set<string>>(new Set());
+  const [user, setUser] = useState<{ name: string; email: string; picture: string } | null>(null);
 
-  const [ideas, setIdeas] = useState<Idea[]>([
-    {
-      id: '1',
-      title: 'Добавить темную тему в приложение',
-      description: 'Было бы здорово иметь возможность переключаться между светлой и темной темой для комфортного чтения в разное время суток.',
-      author: 'Алексей М.',
-      likes: 42,
-      comments: [
-        { id: 'c1', author: 'Мария К.', text: 'Отличная идея! Поддерживаю', timestamp: '10 мин назад' },
-        { id: 'c2', author: 'Иван П.', text: 'Уже давно жду эту функцию', timestamp: '25 мин назад' }
-      ],
-      timestamp: '2 часа назад',
-      category: 'UI/UX'
-    },
-    {
-      id: '2',
-      title: 'Интеграция с облачными хранилищами',
-      description: 'Возможность синхронизировать данные с Google Drive, Dropbox и другими сервисами.',
-      author: 'Елена С.',
-      likes: 38,
-      comments: [],
-      timestamp: '5 часов назад',
-      category: 'Функционал'
-    },
-    {
-      id: '3',
-      title: 'Режим совместного редактирования',
-      description: 'Добавить возможность работать над документами вместе с другими пользователями в реальном времени.',
-      author: 'Дмитрий Л.',
-      likes: 56,
-      comments: [
-        { id: 'c3', author: 'Ольга В.', text: 'Это будет прорыв!', timestamp: '1 час назад' }
-      ],
-      timestamp: '1 день назад',
-      category: 'Функционал'
-    }
-  ]);
+  const [ideas, setIdeas] = useState<Idea[]>([]);
 
   const [newIdea, setNewIdea] = useState({
     title: '',
@@ -95,13 +60,55 @@ const Index = () => {
     });
   };
 
+  const handleGoogleLogin = () => {
+    const clientId = '629116677903-9uu1j8b3bvj0dku0vpqstm58d9jdgbmp.apps.googleusercontent.com';
+    const redirectUri = window.location.origin;
+    const scope = 'profile email';
+    const responseType = 'token';
+    
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=${responseType}&scope=${scope}`;
+    window.location.href = authUrl;
+  };
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash) {
+      const params = new URLSearchParams(hash.substring(1));
+      const accessToken = params.get('access_token');
+      
+      if (accessToken) {
+        fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        })
+          .then(res => res.json())
+          .then(data => {
+            setUser({
+              name: data.name,
+              email: data.email,
+              picture: data.picture
+            });
+            window.history.replaceState({}, document.title, window.location.pathname);
+          })
+          .catch(err => console.error('Error fetching user info:', err));
+      }
+    }
+  }, []);
+
+  const handleLogout = () => {
+    setUser(null);
+  };
+
   const handleSubmitIdea = () => {
+    if (!user) {
+      alert('Пожалуйста, войдите через Google, чтобы публиковать идеи');
+      return;
+    }
     if (newIdea.title.trim() && newIdea.description.trim()) {
       const idea: Idea = {
         id: Date.now().toString(),
         title: newIdea.title,
         description: newIdea.description,
-        author: 'Вы',
+        author: user.name,
         likes: 0,
         comments: [],
         timestamp: 'только что',
@@ -116,6 +123,10 @@ const Index = () => {
   const [newComment, setNewComment] = useState<{ [key: string]: string }>({});
 
   const handleAddComment = (ideaId: string) => {
+    if (!user) {
+      alert('Пожалуйста, войдите через Google, чтобы комментировать');
+      return;
+    }
     const commentText = newComment[ideaId]?.trim();
     if (commentText) {
       setIdeas(ideas.map(idea => {
@@ -126,7 +137,7 @@ const Index = () => {
               ...idea.comments,
               {
                 id: Date.now().toString(),
-                author: 'Вы',
+                author: user.name,
                 text: commentText,
                 timestamp: 'только что'
               }
@@ -141,7 +152,7 @@ const Index = () => {
 
   const filteredIdeas = ideas.filter(idea => {
     if (activeTab === 'popular') return idea.likes > 40;
-    if (activeTab === 'mine') return idea.author === 'Вы';
+    if (activeTab === 'mine') return user && idea.author === user.name;
     if (activeTab === 'search') {
       return idea.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
              idea.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -152,15 +163,54 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-purple-50 to-pink-50">
       <div className="max-w-6xl mx-auto px-4 py-8">
-        <header className="mb-8 text-center animate-fade-in">
-          <div className="inline-block mb-4">
-            <div className="bg-gradient-vibrant p-6 rounded-3xl shadow-2xl">
-              <h1 className="text-5xl font-bold text-white drop-shadow-lg">
-                Pocketbook Forum
-              </h1>
+        <header className="mb-8 animate-fade-in">
+          <div className="flex justify-between items-center mb-6">
+            <div className="inline-block">
+              <div className="bg-gradient-vibrant p-4 rounded-3xl shadow-2xl">
+                <h1 className="text-4xl font-bold text-white drop-shadow-lg">
+                  Pocketbook Forum
+                </h1>
+              </div>
             </div>
+            {!user ? (
+              <Button
+                onClick={handleGoogleLogin}
+                className="bg-white hover:bg-gray-50 text-gray-800 border-2 border-gray-200 shadow-lg px-6 h-12 rounded-xl"
+              >
+                <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Войти через Google
+              </Button>
+            ) : (
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl shadow-lg">
+                  <Avatar className="w-10 h-10 border-2 border-primary/20">
+                    <img src={user.picture} alt={user.name} />
+                    <AvatarFallback className="bg-gradient-vibrant text-white font-bold">
+                      {user.name.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="text-left">
+                    <p className="font-semibold text-sm">{user.name}</p>
+                    <p className="text-xs text-muted-foreground">{user.email}</p>
+                  </div>
+                </div>
+                <Button
+                  onClick={handleLogout}
+                  variant="outline"
+                  className="h-12 rounded-xl"
+                >
+                  <Icon name="LogOut" size={18} className="mr-2" />
+                  Выйти
+                </Button>
+              </div>
+            )}
           </div>
-          <p className="text-lg text-muted-foreground mt-4">
+          <p className="text-lg text-muted-foreground text-center">
             Делитесь идеями, обсуждайте и вдохновляйте сообщество 💡
           </p>
         </header>
